@@ -166,14 +166,32 @@ func (a *ldapAuther) GetGrafanaUserFor(ctx *m.ReqContext, ldapUser *LdapUserInfo
 		OrgRoles:   map[int64]m.RoleType{},
 	}
 
-	for _, group := range a.server.LdapGroups {
-		// only use the first match for each org
-		if extUser.OrgRoles[group.OrgId] != "" {
-			continue
-		}
+	a.log.Debug("ldap groups", "info", spew.Sdump(a.server.LdapGroups))
 
-		if ldapUser.isMemberOf(group.GroupDN) {
-			extUser.OrgRoles[group.OrgId] = group.OrgRole
+	for _, group := range a.server.LdapGroups {
+		a.log.Debug(fmt.Sprintf("Testing if user %s in ldap group %s", extUser.Name, group.GroupDN), "info")
+		// case multi org_ids is defined
+		if len(group.OrgIds) > 0 {
+			for _, orgId := range group.OrgIds {
+				if extUser.OrgRoles[orgId] != "" {
+					a.log.Debug(fmt.Sprintf("Role %s for user %s in organisation %s already set", group.OrgRole, extUser.Name, orgId), "info")
+					continue
+				}
+				if ldapUser.isMemberOf(group.GroupDN) {
+					a.log.Debug(fmt.Sprintf("Adding user %s to organisation %s with role %s", extUser.Name, orgId, group.OrgRole), "info")
+					extUser.OrgRoles[orgId] = group.OrgRole
+				}
+			}
+		} else {
+
+			// only use the first match for each org
+			if extUser.OrgRoles[group.OrgId] != "" {
+				continue
+			}
+
+			if ldapUser.isMemberOf(group.GroupDN) {
+				extUser.OrgRoles[group.OrgId] = group.OrgRole
+			}
 		}
 	}
 
